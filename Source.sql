@@ -748,3 +748,139 @@ SELECT * FROM employees_audit;
 
 -- Удалить данные из таблицы аулита
 DELETE FROM employees_audit;
+
+
+
+
+
+
+
+
+-- ПР№12 СОЗДАНИЕ СХЕМ И РОЛЕЙ В POSTGRESQL
+-- СОЗДАНИЕ РОЛЕЙ
+-- Администратор — полный доступ ко всем операциям
+CREATE ROLE admin_role
+    NOLOGIN          -- это группа, не пользователь
+    SUPERUSER        -- полный доступ
+    CREATEDB
+    CREATEROLE;
+
+-- Сотрудник — может добавлять, редактировать, НО НЕ удалять
+CREATE ROLE employee_role
+    NOLOGIN;
+
+-- Руководитель — только просмотр
+CREATE ROLE manager_role
+    NOLOGIN;
+
+
+
+
+-- Права для employee_role 
+GRANT SELECT, INSERT, UPDATE ON TABLE clients TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE cars TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE workshops TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE employees TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE services TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE orders TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE order_positions TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE details TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE stock_balance TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE used_details TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE suppliers TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE orders_to_supplier TO employee_role;
+GRANT SELECT, INSERT, UPDATE ON TABLE payments TO employee_role;
+-- Доступ к последовательностям SERIAL
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO employee_role;
+
+
+
+-- Права ждя manager_role
+GRANT SELECT ON TABLE clients TO manager_role;
+GRANT SELECT ON TABLE cars TO manager_role;
+GRANT SELECT ON TABLE workshops TO manager_role;
+GRANT SELECT ON TABLE employees TO manager_role;
+GRANT SELECT ON TABLE services TO manager_role;
+GRANT SELECT ON TABLE orders TO manager_role;
+GRANT SELECT ON TABLE order_positions TO manager_role;
+GRANT SELECT ON TABLE details TO manager_role;
+GRANT SELECT ON TABLE stock_balance TO manager_role;
+GRANT SELECT ON TABLE used_details TO manager_role;
+GRANT SELECT ON TABLE suppliers TO manager_role;
+GRANT SELECT ON TABLE orders_to_supplier TO manager_role;
+GRANT SELECT ON TABLE payments TO manager_role;
+
+
+
+
+
+CREATE USER user_admin
+    LOGIN
+    PASSWORD 'test1';
+GRANT admin_role TO user_admin;
+
+-- Пользователь-сотрудник
+CREATE USER user_employee
+    LOGIN
+    PASSWORD 'test2';
+GRANT employee_role TO user_employee;
+
+-- Пользователь-руководитель
+CREATE USER user_manager
+    LOGIN
+    PASSWORD 'test3';
+GRANT manager_role TO user_manager;
+
+
+
+
+
+-- Посмотреть все роли в системе
+SELECT rolname, rolsuper, rolcreaterole, rolcreatedb, rolcanlogin
+FROM pg_roles
+WHERE rolname IN ('admin_role', 'employee_role', 'manager_role',
+                  'user_admin', 'user_employee', 'user_manager')
+ORDER BY rolname;
+
+-- Посмотреть, какие роли назначены пользователям
+SELECT
+    r.rolname AS "Пользователь",
+    g.rolname AS "Роль"
+FROM pg_auth_members m
+JOIN pg_roles r ON r.oid = m.member
+JOIN pg_roles g ON g.oid = m.roleid
+WHERE r.rolname IN ('user_admin', 'user_employee', 'user_manager')
+ORDER BY r.rolname;
+
+
+
+-- Посмотреть права на таблицы
+-- Пытаемся за сотрудника удалить поле
+SET ROLE user_employee;
+DELETE FROM employees WHERE e_id = -1;
+-- Сброс временной роли ВСЕГДА после перехода на новую временнуб роль
+RESET ROLE;
+
+-- Менеджер не может вставлять новые данные
+SET ROLE user_manager;
+INSERT INTO cars
+(a_num, a_mark, a_date, a_gnum, a_mile, a_color, a_fuel, a_desc)
+VALUES
+('XTA11111111111112', 'Porshe 911', '2020-08-10', 'А111АА88', 15000, 'Белый', 'Бензин', 'Плановое ТО');
+-- Сброс временной роли ВСЕГДА после перехода на новую временную роль
+RESET ROLE;
+
+-- (Использовать запрос только при защите ПР) При этом работник может вставить новые данные
+SET ROLE user_employee;
+INSERT INTO cars
+(a_num, a_mark, a_date, a_gnum, a_mile, a_color, a_fuel, a_desc)
+VALUES
+('XTA11111111111112', 'Porshe 911', '2020-08-10', 'А111АА88', 15000, 'Белый', 'Бензин', 'Плановое ТО');
+-- Сброс временной роли ВСЕГДА после перехода на новую временнуб роль
+RESET ROLE;
+
+-- Просмотреть за менеджера всю таблицу с машинами 
+SET ROLE user_manager;
+SELECT * FROM cars;
+-- Сброс временной роли
+RESET ROLE;
