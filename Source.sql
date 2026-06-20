@@ -516,3 +516,231 @@ FROM used_details ud
 JOIN orders o ON ud.u_order = o.o_id
 JOIN details d ON ud.u_detail = d.d_id
 ORDER BY o.o_id, d.d_name;
+
+
+
+
+
+
+
+-- ПР№11 Создание системы аудита
+
+-- Аудит таблицы EMPLOYEES
+
+-- Для хранения значений об изменении в БД
+-- old старые значения
+-- new новые данные
+-- А также метаданные (Кто и когда)
+CREATE TABLE employees_audit(
+	audit_id SERIAL PRIMARY KEY,
+	operation_type VARCHAR(10) NOT NULL CHECK (operation_type IN ('INSERT', 'UPDATE', 'DELETE')), -- теперь можно вводить только INSERT/UPDATE/DELETE
+	operation_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+	employee_id INTEGER,
+    old_name VARCHAR(50),
+	old_surn VARCHAR(50),
+	old_patr VARCHAR(50),
+	old_role VARCHAR(50),
+    old_spec VARCHAR(300),
+	old_telephone VARCHAR(50),
+    old_exp INTEGER,
+    old_qual VARCHAR(50),
+
+	new_name VARCHAR(50),
+	new_surn VARCHAR(50),
+	new_patr VARCHAR(50),
+	new_role VARCHAR(50),
+    new_spec VARCHAR(300),
+	new_telephone VARCHAR(50),
+    new_exp INTEGER,
+    new_qual VARCHAR(50),
+
+	-- Когда изменили
+	changed_by VARCHAR(100) DEFAULT CURRENT_USER,
+	-- Название приложения которое изменило
+	application_name VARCHAR(100),
+	-- IP адресс того кто изменил
+	client_address INET
+);
+
+-- Тригерная функция
+-- Функция привязанна к employees чтобы указать как сохранять в неё данные и куда записывать историю
+CREATE OR REPLACE FUNCTION process_employees_audit()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+AS $$
+BEGIN
+	-- TG_OP спец переменная содержащяя тип операции
+    IF (TG_OP = 'INSERT') THEN
+        INSERT INTO employees_audit (
+            operation_type,
+            employee_id,
+			
+            new_name,
+            new_surn,
+            new_patr,
+            new_role,
+            new_spec,
+            new_telephone,
+            new_exp,
+            new_qual,
+
+            application_name,
+            client_address
+        ) VALUES (
+            'INSERT',
+            NEW.e_id,
+            NEW.e_name,
+            NEW.e_surn,
+            NEW.e_patr,
+            NEW.e_role,
+            NEW.e_spec,
+            NEW.e_telephone,
+            NEW.e_exp,
+            NEW.e_qual,
+			
+            current_setting('application_name', true),
+            inet_client_addr()
+        );
+        RETURN NEW;
+
+    ELSIF (TG_OP = 'UPDATE') THEN
+		-- IS DISTINCT FROM - это проверка действительно ли были изменения. Т.е вернёт ли условие true если старые и новые будут не равны
+		-- как оператор != из C++ (a != b || c != d)
+        IF (
+            OLD.e_name IS DISTINCT FROM NEW.e_name OR
+            OLD.e_surn IS DISTINCT FROM NEW.e_surn OR
+            OLD.e_patr IS DISTINCT FROM NEW.e_patr OR
+            OLD.e_role IS DISTINCT FROM NEW.e_role OR
+            OLD.e_spec IS DISTINCT FROM NEW.e_spec OR
+            OLD.e_telephone IS DISTINCT FROM NEW.e_telephone OR
+            OLD.e_exp IS DISTINCT FROM NEW.e_exp OR
+			OLD.e_qual IS DISTINCT FROM NEW.e_qual
+        ) THEN
+            INSERT INTO employees_audit (
+                operation_type,
+                employee_id,
+                
+                old_name,
+                old_surn,
+                old_patr,
+                old_role,
+                old_spec,
+                old_telephone,
+                old_exp,
+                old_qual,
+                    
+                new_name,
+                new_surn,
+                new_patr,
+                new_role,
+                new_spec,
+                new_telephone,
+                new_exp,
+                new_qual,
+
+                application_name,
+                client_address
+            ) VALUES (
+                'UPDATE',
+                NEW.e_id,
+               
+                OLD.e_name,
+                OLD.e_surn,
+                OLD.e_patr,
+                OLD.e_role,
+                OLD.e_spec,
+                OLD.e_telephone,
+                OLD.e_exp,
+                OLD.e_qual,
+
+                NEW.e_name,
+                NEW.e_surn,
+                NEW.e_patr,
+                NEW.e_role,
+                NEW.e_spec,
+                NEW.e_telephone,
+                NEW.e_exp,
+                NEW.e_qual,
+                
+                current_setting('application_name', true),
+                inet_client_addr()
+            );
+		-- ENF IF -  окончание условия
+        END IF;
+        RETURN NEW;
+
+    ELSIF (TG_OP = 'DELETE') THEN
+        INSERT INTO employees_audit (
+            operation_type,
+            employee_id,
+
+            old_name,
+            old_surn,
+            old_patr,
+            old_role,
+            old_spec,
+            old_telephone,
+            old_exp,
+            old_qual,
+
+            application_name,
+            client_address
+        ) VALUES (
+            'DELETE',
+            OLD.e_id,
+            OLD.e_name,
+            OLD.e_surn,
+            OLD.e_patr,
+            OLD.e_role,
+            OLD.e_spec,
+            OLD.e_telephone,
+            OLD.e_exp,
+            OLD.e_qual,
+
+            current_setting('application_name', true),
+            inet_client_addr()
+        );
+        RETURN OLD;
+    END IF;
+    RETURN NULL;
+END;
+$$;
+
+-- Тригер функция - чтобы связать функцию process_employees_audit() с таблицей employees
+
+-- CREATE TRIGGER - создания тригера
+CREATE TRIGGER trg_employees_audit
+-- После операции INSERT или UPDATE или DELEE в таблицу Работники
+AFTER INSERT OR UPDATE OR DELETE ON Employees
+-- Для кажой строки
+FOR EACH ROW
+-- Запустить функцию
+EXECUTE FUNCTION process_employees_audit();
+
+-- Проверка есть ли триггер
+SELECT
+ tgname AS trigger_name,
+ tgtype::integer & 1 > 0 AS "before",
+ tgtype::integer & 2 > 0 AS "insert",
+ tgtype::integer & 4 > 0 AS "delete",
+ tgtype::integer & 8 > 0 AS "update",
+ tgenabled AS enabled
+FROM pg_trigger
+WHERE tgrelid = 'employees'::regclass;
+
+-- Тест системы аудита
+
+INSERT INTO employees
+(e_name, e_surn, e_patr, e_role, e_spec, e_telephone, e_exp, e_qual)
+VALUES
+('Иван', 'Иванов', 'Иванович', 'Слесарь', 'Ремонт Чего-то', '+79001111111', 15, 'Высшая');
+
+UPDATE employees 
+SET e_role = 'Маляр' 
+WHERE e_surn = 'Иванов';
+
+DELETE FROM employees 
+WHERE e_surn = 'Иванов';
+
+SELECT * FROM employees_audit;
