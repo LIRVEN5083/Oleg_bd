@@ -463,7 +463,7 @@ SELECT
 FROM orders o
 JOIN clients c ON o.o_client = c.c_id -- Используем JOIN что-бы связать в запросе ещё и внешние ключи
 JOIN cars a ON o.o_car = a.a_id
-ORDER BY o.o_id;
+ORDER BY o.o_id; -- Сразу сортировка по номеру заказа от меньшего к большему
 
 -- Заказы с сотрудником и мастерской
 SELECT
