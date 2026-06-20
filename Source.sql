@@ -171,6 +171,11 @@ CREATE TABLE payments (
     FOREIGN KEY (pay_order) REFERENCES orders(o_id)
 );
 
+
+
+
+
+
 -- ПР№7 Изменение таблиц в SQL.
 
 -- Для примера мы будем работать с адрессом поставщика
@@ -190,6 +195,12 @@ ALTER TABLE suppliers ALTER COLUMN su_name DROP NOT NULL; -- Убираем ог
 ALTER TABLE suppliers ALTER COLUMN su_name SET NOT NULL; -- Возвращаем наше ограничение обратно 
 
 ALTER TABLE suppliers DROP CONSTRAINT unique_ADDR; -- Убираем ограничение на уникальность Название ограничения unique_COLOR
+
+
+
+
+
+
 
 -- ПР№8 Добавление данных в таблицы БД
 
@@ -390,3 +401,118 @@ VALUES
 (8,'2025-05-16',6000.00,'Карта','Оплачен'),
 (9,'2025-05-18',11000.00,'Наличные','Оплачен'),
 (10,'2025-05-20',4500.00,'Карта','Оплачен');
+
+
+
+
+
+
+
+-- ПР№9 Простые запросы на выборку
+
+-- Отсортировать 3 поля из таблицы "машины" от большего к меньшему, по пробегу
+SELECT a_mark, a_gnum, a_color, a_mile
+FROM cars
+ORDER BY a_mile DESC;
+
+-- Выбрать 3 поля из таблицы "клиенты"
+SELECT c_surn, c_name, c_patr
+FROM clients;
+
+-- Выбрать 3 поля из таблицы "сотрудники", у которых стаж больше 7 лет 
+SELECT e_surn, e_name, e_role, e_exp
+FROM employees
+WHERE e_exp > 7;
+
+-- Выбрать 3 поля из таблицы "машины" у которых пробег от 50000 до 100000 миль
+SELECT a_mark, a_gnum, a_mile
+FROM cars
+WHERE a_mile BETWEEN 50000 AND 100000;
+
+-- Выбераем 2 поля из таблицы "услуги" у которых наименовании услуги начинается на 'Замена'
+SELECT s_name, s_price
+FROM services
+WHERE s_name LIKE 'Замена%';
+
+
+
+
+
+
+
+
+-- ПР№10 Сложные запросы на выборку
+
+-- FROM/JOIN - откуда куда (JOIN для внешних ключей)
+-- WHERE - как фильтруем строки? (Определённое условие выборки)
+-- GROUP BY - берём группы строк и обьединяем во что-то одно
+-- HAVING - работает как WHERE только нужен для функций таких как: SUM, COUNT, AVG
+-- SELECT - выборка полей
+-- ORDER BY - сортировка 
+-- Аллиасы - это временные наименования запросов. К примеру Someone s, и теперь мы можем обращятся на Someone через s. 
+-- AS - временные наименования для полей запросов. К примеру c_id AS "Номер клиента", и теперь в запросе будет писатся не c_id, а "Номер клиента"
+
+-- Список заказов с клиентом и автомобилем
+SELECT
+    o.o_id AS "Номер_заказа",
+    c.c_surn || ' ' || c.c_name AS "Клиент", -- Тут происходит конкатенация строк (сшивание), то-есть мы между строк добавляем пробел
+    a.a_mark AS "Автомобиль",
+    a.a_gnum AS "Госномер",
+    o.o_status AS "Статус",
+    o.o_price AS "Стоимость"
+FROM orders o
+JOIN clients c ON o.o_client = c.c_id -- Используем JOIN что-бы связать в запросе ещё и внешние ключи
+JOIN cars a ON o.o_car = a.a_id
+ORDER BY o.o_id;
+
+-- Заказы с сотрудником и мастерской
+SELECT
+    o.o_id AS "Номер_заказа",
+    e.e_surn || ' ' || e.e_name AS "Сотрудник",
+    w.w_name AS "Мастерская",
+    o.o_date AS "Дата_заказа",
+    o.o_status AS "Статус"
+FROM orders o
+JOIN employees e ON o.o_employee = e.e_id
+JOIN workshops w ON o.o_workshop = w.w_id
+ORDER BY o.o_date;
+
+-- Количество заказов у каждого клиента
+SELECT
+    c.c_id AS "Код_клиента",
+    c.c_surn || ' ' || c.c_name AS "Клиент",
+    COUNT(o.o_id) AS "Количество_заказов"
+FROM clients c
+LEFT JOIN orders o ON o.o_client = c.c_id
+GROUP BY c.c_id, c.c_surn, c.c_name
+ORDER BY "Количество_заказов" DESC;
+
+-- Общая сумма заказов по каждому клиенту
+SELECT
+    c.c_surn || ' ' || c.c_name AS "Клиент",
+    SUM(o.o_price) AS "Общая_сумма"
+FROM clients c
+JOIN orders o ON o.o_client = c.c_id
+GROUP BY c.c_surn, c.c_name
+ORDER BY "Общая_сумма" DESC;
+
+-- Какие услуги входят в заказы
+SELECT
+    o.o_id AS "Номер_заказа",
+    s.s_name AS "Услуга",
+    op.p_actual AS "Стоимость_услуги"
+FROM order_positions op
+JOIN orders o ON op.p_order = o.o_id
+JOIN services s ON op.p_service = s.s_id
+ORDER BY o.o_id, s.s_name;
+
+-- Использованные запчасти в заказах
+SELECT
+    o.o_id AS "Номер_заказа",
+    d.d_name AS "Запчасть",
+    ud.u_count AS "Количество",
+    ud.u_price_per AS "Цена_за_единицу"
+FROM used_details ud
+JOIN orders o ON ud.u_order = o.o_id
+JOIN details d ON ud.u_detail = d.d_id
+ORDER BY o.o_id, d.d_name;
