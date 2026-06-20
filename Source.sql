@@ -741,6 +741,10 @@ SET e_role = 'Маляр'
 WHERE e_surn = 'Иванов';
 
 DELETE FROM employees 
-WHERE e_surn = 'Иванов';
+WHERE e_spec = 'Ремонт Чего-то';
 
+-- Просмотреть таблицу аудита
 SELECT * FROM employees_audit;
+
+-- Удалить данные из таблицы аулита
+DELETE FROM employees_audit;
